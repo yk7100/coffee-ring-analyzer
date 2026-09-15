@@ -3,19 +3,26 @@ export function parseCSV(text) {
  if(rows[0]?.join(',')!=='Distance_(pixels),Gray_Value')throw Error('CSVの列名は Distance_(pixels),Gray_Value にしてください。');
  const x=[],y=[];for(const [i,r] of rows.slice(1).entries()){if(r.length!==2||r.some(v=>v==='')||r.some(v=>!Number.isFinite(Number(v))))throw Error(`${i+2}行目を読み込めません。`);x.push(+r[0]);y.push(+r[1]);}return {x,y};
 }
-export function analyze({x,y}) {
+export function analyze({x,y}, manual=null, widths={left:15,right:15}) {
  if(x.length<3||x.length!==y.length||[...x,...y].some(v=>!Number.isFinite(v)))throw Error('有効なプロファイルが必要です。');
  for(let i=1;i<x.length;i++)if(Math.abs(x[i]-x[i-1]-1)>1e-4)throw Error('距離は1 px刻みで入力してください。');
+ if(![widths.left,widths.right].every(v=>Number.isInteger(v)&&v>=0&&v<=10000))throw Error('平均範囲は0〜10000 pxの整数にしてください。');
  const length=x.at(-1)-x[0],t=x.map(v=>(v-x[0])/length);
  const min=(lo,hi)=>{let id=-1;for(let i=0;i<t.length;i++)if(t[i]>=lo&&t[i]<=hi&&(id<0||y[i]<y[id]))id=i;return id;};
- const left=min(0,1/3),right=min(2/3,1);
+ let left=min(0,1/3),right=min(2/3,1);
+ if(manual){
+  if(!Number.isFinite(manual.left)||!Number.isFinite(manual.right)||manual.left<x[0]||manual.right>x.at(-1)||manual.left>=manual.right)throw Error('外周位置は測定線内で、始点側 < 終点側になるよう指定してください。');
+  const nearest=v=>Math.max(0,Math.min(x.length-1,Math.round(v-x[0])));
+  left=nearest(manual.left);right=nearest(manual.right);
+  if(left>=right)throw Error('左右に異なる外周位置を指定してください。');
+ }
  const region=(lo,hi)=>{const ids=x.map((v,i)=>v>=lo-1e-8&&v<=hi+1e-8?i:-1).filter(i=>i>=0);return {mean:ids.reduce((s,i)=>s+y[i],0)/ids.length,n:ids.length,lo,hi,actualLo:x[ids[0]],actualHi:x[ids.at(-1)]};};
- const L=region(x[left]-15,x[left]+15),R=region(x[right]-15,x[right]+15),C=region(x[0]+.4*length,x[0]+.6*length);
- const edge=(L.mean+R.mean)/2,short=L.n!==31||R.n!==31,interior=t[left]>.25||t[right]<.75;
- const warnings=[];if(short)warnings.push('端の±15 pxが測定線に収まりません。部分平均を表示し、Kは計算しません。両端に余白を加えて再測定してください。');
+ const L=region(x[left]-widths.left,x[left]+widths.left),R=region(x[right]-widths.right,x[right]+widths.right),C=region(x[0]+.4*length,x[0]+.6*length);
+ const edge=(L.mean+R.mean)/2,short=L.n!==2*widths.left+1||R.n!==2*widths.right+1,interior=!manual&&(t[left]>.25||t[right]<.75);
+ const warnings=[];if(short)warnings.push('指定した平均範囲が測定線に収まりません。部分平均を表示し、Kは計算しません。両端に余白を加えて再測定してください。');
  if(interior)warnings.push('最小点が中央寄りです。外周ではなく内部を拾っている可能性があります。写真で確認してください。');
  if(!(C.mean>0))warnings.push('中央平均が0以下のため、Kは計算できません。');
- return {left,right,L,R,C,edge,K:!short&&C.mean>0?100*(1-edge/C.mean):null,short,interior,warnings,length};
+ return {widths:{...widths},method:manual?'manual':'auto',left,right,L,R,C,edge,K:!short&&C.mean>0?100*(1-edge/C.mean):null,short,interior,warnings,length};
 }
 export function sampleLine(pixels,width,height,a,b,mode='mean') {
  for(const p of [a,b])if(!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.y<0||p.x>width-1||p.y>height-1)throw Error('測定線の両端を画像内に置いてください。');
