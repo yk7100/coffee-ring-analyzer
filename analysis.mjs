@@ -6,7 +6,8 @@ export function parseCSV(text) {
 export function analyze({x,y}, manual=null, widths={left:15,right:15}) {
  if(x.length<3||x.length!==y.length||[...x,...y].some(v=>!Number.isFinite(v)))throw Error('有効なプロファイルが必要です。');
  for(let i=1;i<x.length;i++)if(Math.abs(x[i]-x[i-1]-1)>1e-4)throw Error('距離は1 px刻みで入力してください。');
- if(![widths.left,widths.right].every(v=>Number.isInteger(v)&&v>=0&&v<=10000))throw Error('平均範囲は0〜10000 pxの整数にしてください。');
+ widths=Object.fromEntries(['left','right'].map(side=>[side,typeof widths[side]==='number'?{minus:widths[side],plus:widths[side]}:{...widths[side]}]));
+ if(![widths.left.minus,widths.left.plus,widths.right.minus,widths.right.plus].every(v=>Number.isInteger(v)&&v>=0&&v<=10000))throw Error('平均範囲は0〜10000 pxの整数にしてください。');
  const length=x.at(-1)-x[0],t=x.map(v=>(v-x[0])/length);
  const min=(lo,hi)=>{let id=-1;for(let i=0;i<t.length;i++)if(t[i]>=lo&&t[i]<=hi&&(id<0||y[i]<y[id]))id=i;return id;};
  let left=min(0,1/3),right=min(2/3,1);
@@ -17,8 +18,8 @@ export function analyze({x,y}, manual=null, widths={left:15,right:15}) {
   if(left>=right)throw Error('左右に異なる外周位置を指定してください。');
  }
  const region=(lo,hi)=>{const ids=x.map((v,i)=>v>=lo-1e-8&&v<=hi+1e-8?i:-1).filter(i=>i>=0);return {mean:ids.reduce((s,i)=>s+y[i],0)/ids.length,n:ids.length,lo,hi,actualLo:x[ids[0]],actualHi:x[ids.at(-1)]};};
- const L=region(x[left]-widths.left,x[left]+widths.left),R=region(x[right]-widths.right,x[right]+widths.right),C=region(x[0]+.4*length,x[0]+.6*length);
- const edge=(L.mean+R.mean)/2,short=L.n!==2*widths.left+1||R.n!==2*widths.right+1,interior=!manual&&(t[left]>.25||t[right]<.75);
+ const L=region(x[left]-widths.left.minus,x[left]+widths.left.plus),R=region(x[right]-widths.right.minus,x[right]+widths.right.plus),C=region(x[0]+.4*length,x[0]+.6*length);
+ const edge=(L.mean+R.mean)/2,short=L.n!==widths.left.minus+widths.left.plus+1||R.n!==widths.right.minus+widths.right.plus+1,interior=!manual&&(t[left]>.25||t[right]<.75);
  const warnings=[];if(short)warnings.push('指定した平均範囲が測定線に収まりません。部分平均を表示し、Kは計算しません。両端に余白を加えて再測定してください。');
  if(interior)warnings.push('最小点が中央寄りです。外周ではなく内部を拾っている可能性があります。写真で確認してください。');
  if(!(C.mean>0))warnings.push('中央平均が0以下のため、Kは計算できません。');
