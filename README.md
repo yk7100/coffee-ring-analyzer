@@ -18,7 +18,12 @@
 - K = 100 × (1 − I edge / I center)。Kは物質量やリングの強さを直接測るものではありません。
 - 平均窓が欠ける場合、部分平均を表示しKは計算しません。中央寄りの最小点は確認の目安を表示します。
 - CSVは1 px刻みの `Distance_(pixels),Gray_Value` 形式。
-- 写真は元解像度で1 px刻み・双線形補間。RGB単純平均または加重平均を選択できます。
+- 写真のプロファイル計算はFiji / ImageJ 1.54pの `ProfilePlot.getProfile()` に合わせています。直線・線幅1・未校正の画素が対象です。RGBのまま／8-bit変換後、単純平均／加重平均、補間あり／なしを選択できます。
+- 線長を四捨五入した区間数で両端までサンプリングし、RGB画素値のfloat丸め・8-bit変換の整数丸めも再現します。距離軸はFijiと同じ0, 1, 2,…で、斜め線の実際の点間距離は厳密な1 pxではありません。
+- 同じ画素配列を入力した独立検証：Fiji本体1.54pと72プロファイル・11,696点を比較し、最大絶対誤差0。水平・垂直・斜め・逆向き・小数座標・画像端、4変換方法×補間ON/OFFを含みます。
+- JPEGデコード・色管理・画像の向きはブラウザとFijiで異なる場合があるため、同じファイル名だけでは一致を保証しません。厳密な再現にはFijiのCSVを利用してください。FijiのPlot表示/CSV自体のfloat変換や小数桁数でも差が出ます。
+- 太い線・曲線・16/32-bit・独自RGB重み・校正値には未対応。I edge / I center / Kは本アプリ独自の追加計算です。
+- 参照実装：[ImageProcessor](https://imagej.net/ij/developer/source/ij/process/ImageProcessor.java.html)、[ColorProcessor](https://imagej.net/ij/developer/source/ij/process/ColorProcessor.java.html)、[ProfilePlot](https://imagej.net/ij/developer/source/ij/gui/ProfilePlot.java.html)。
 
 ## 公開・起動
 GitHub Pages: Settings → Pages → Deploy from a branch → main / (root)。

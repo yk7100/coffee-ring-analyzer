@@ -25,11 +25,27 @@ export function analyze({x,y}, manual=null, widths={left:15,right:15}) {
  if(!(C.mean>0))warnings.push('中央平均が0以下のため、Kは計算できません。');
  return {widths:{...widths},method:manual?'manual':'auto',left,right,L,R,C,edge,K:!short&&C.mean>0?100*(1-edge/C.mean):null,short,interior,warnings,length};
 }
-export function sampleLine(pixels,width,height,a,b,mode='mean') {
+// Fiji/ImageJ 1.54p: RGB or converted 8-bit, straight line width 1,
+// uncalibrated pixels. Reference: ImageProcessor.getLine/getInterpolatedValue,
+// ColorProcessor.getPixelValue and TypeConverter.convertRGBToByte.
+export function sampleLine(pixels,width,height,a,b,mode='mean',interpolate=true) {
  for(const p of [a,b])if(!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.y<0||p.x>width-1||p.y>height-1)throw Error('測定線の両端を画像内に置いてください。');
- const len=Math.hypot(b.x-a.x,b.y-a.y);if(len<60)throw Error('測定線を60 px以上にしてください。');
- const n=Math.floor(len)+1,x=[],y=[];
- const gray=(xx,yy)=>{const k=4*(yy*width+xx);return mode==='mean'?(pixels[k]+pixels[k+1]+pixels[k+2])/3:.299*pixels[k]+.587*pixels[k+1]+.114*pixels[k+2];};
- for(let i=0;i<n;i++){const px=a.x+(b.x-a.x)*i/len,py=a.y+(b.y-a.y)*i/len,xx=Math.floor(px),yy=Math.floor(py),dx=px-xx,dy=py-yy,x2=Math.min(width-1,xx+1),y2=Math.min(height-1,yy+1);x.push(i);y.push((1-dy)*((1-dx)*gray(xx,yy)+dx*gray(x2,yy))+dy*((1-dx)*gray(xx,y2)+dx*gray(x2,y2)));}
- return {x,y};
+ if(!['mean','weighted','mean8','weighted8'].includes(mode))throw Error('輝度の計算方法を選択してください。');
+ const dx=b.x-a.x,dy=b.y-a.y,len=Math.sqrt(dx*dx+dy*dy);
+ if(len<60)throw Error('測定線を60 px以上にしてください。');
+ const n=Math.round(len),x=[],y=[],weighted=mode.startsWith('weighted'),byte=mode.endsWith('8');
+ const weights=weighted?[.299,.587,.114]:[1/3,1/3,1/3];
+ const gray=(xx,yy)=>{if(xx<0||yy<0||xx>=width||yy>=height)return NaN;const k=4*(yy*width+xx),v=pixels[k]*weights[0]+pixels[k+1]*weights[1]+pixels[k+2]*weights[2];return byte?Math.floor(v+.5):Math.fround(v);};
+ const edge=(xx,yy)=>gray(Math.max(0,Math.min(width-1,xx)),Math.max(0,Math.min(height-1,yy)));
+ const sample=(xx,yy)=>{
+  if(!interpolate)return gray(Math.round(xx),Math.round(yy));
+  if(xx<-1||xx>=width||yy<-1||yy>=height)return 0;
+  const ix=Math.trunc(xx),iy=Math.trunc(yy),fx=Math.max(0,xx-ix),fy=Math.max(0,yy-iy);
+  const lower=edge(ix,iy),upper=edge(ix,iy+1);
+  const low=lower+fx*(edge(ix+1,iy)-lower),high=upper+fx*(edge(ix+1,iy+1)-upper);
+  return low+fy*(high-low);
+ };
+ // Repeated addition mirrors ImageJ, including its subpixel rounding behavior.
+ let rx=a.x,ry=a.y;for(let i=0;i<=n;i++){x.push(i);y.push(sample(rx,ry));rx+=dx/n;ry+=dy/n;}
+ return {x,y,engine:'ImageJ 1.54p',mode,interpolate,lineWidth:1,geometricLength:len};
 }
